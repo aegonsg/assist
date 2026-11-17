@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-export const SESSION_TTL_SECONDS = 72 * 60 * 60;
+export const SESSION_TTL_SECONDS = 400 * 24 * 60 * 60;
 
 function getSecret() {
   const value = process.env.JWT_SECRET;
@@ -12,7 +12,7 @@ function getSecret() {
   return new TextEncoder().encode(value);
 }
 
-export async function signToken(payload: Record<string, unknown>, ttl = "72h") {
+export async function signToken(payload: Record<string, unknown>, ttl = "400d") {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

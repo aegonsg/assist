@@ -4,7 +4,9 @@ import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { getSession, isSameOrigin } from "@/lib/auth";
 
-const schema = z.object({ text: z.string().trim().min(1).max(4000) });
+const schema = z.object({
+  text: z.string().min(1).max(4000).refine((value) => value.trim().length > 0),
+});
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });

@@ -23,14 +23,14 @@ type RequestItem = {
   status: string;
   createdAt: string;
 };
-type FeedMessage = Message & { contactName: string };
-type ContactItem = { _id: string; name: string; username: string; disabled: boolean; registered: boolean; lastActiveAt?: string };
+type FeedMessage = Message & { contactId: string; contactName: string };
+type ContactItem = { _id: string; name: string; username: string; disabled: boolean; registered: boolean; lastActiveAt?: string; createdAt?: string };
 type ContactFilter = "all" | "active" | "disabled" | "invites";
 type GroupMessage = { _id: string; groupId: string; senderId: string; senderName: string; text: string; createdAt: string };
 type UserGroup = { _id: string; name: string; members: string[]; messages: GroupMessage[] };
 type OwnerGroup = { _id: string; name: string; memberIds: string[]; members: { _id: string; name: string; username: string }[]; messages: GroupMessage[] };
 type UserSection = "chat" | "requests" | "groups" | "saved";
-type OwnerSection = "inbox" | "activity" | "users" | "groups" | "settings";
+type OwnerSection = "inbox" | "requests" | "activity" | "users" | "groups" | "settings";
 
 const panel = "glass rounded-3xl p-4 sm:p-6";
 const field = "w-full rounded-xl border border-red-300/20 bg-black/70 px-4 py-3 text-white outline-none transition focus:border-red-400";
@@ -43,13 +43,14 @@ const userSections: { id: UserSection; label: string }[] = [
 ];
 const userSectionIds: readonly UserSection[] = ["chat", "requests", "groups", "saved"];
 const ownerSections: { id: OwnerSection; label: string }[] = [
-  { id: "inbox", label: "Request inbox" },
+  { id: "inbox", label: "Chats" },
+  { id: "requests", label: "Pending requests" },
   { id: "activity", label: "Message activity" },
   { id: "users", label: "User management" },
   { id: "groups", label: "Group chats" },
   { id: "settings", label: "Account settings" },
 ];
-const ownerSectionIds: readonly OwnerSection[] = ["inbox", "activity", "users", "groups", "settings"];
+const ownerSectionIds: readonly OwnerSection[] = ["inbox", "requests", "activity", "users", "groups", "settings"];
 
 function useSectionNavigation<T extends string>(defaultSection: T, validSections: readonly T[]) {
   const [section, setSection] = useState<T>(defaultSection);
@@ -652,6 +653,13 @@ export function OwnerPortal() {
   const [section, navigate] = useSectionNavigation<OwnerSection>("inbox", ownerSectionIds);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [feed, setFeed] = useState<FeedMessage[]>([]);
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [selectedChatMessages, setSelectedChatMessages] = useState<FeedMessage[]>([]);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const ownerChatScrollRef = useRef<HTMLDivElement>(null);
+  const ownerChatAtBottom = useRef(true);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [messageEditDraft, setMessageEditDraft] = useState("");
   const [messageEditBusy, setMessageEditBusy] = useState(false);
@@ -697,8 +705,43 @@ export function OwnerPortal() {
     setRequests(requestData.requests);
     setFeed(feedData.messages);
     setContacts(contactData.contacts);
+    setSelectedContactId((current) => current && contactData.contacts.some((contact: ContactItem) => contact._id === current)
+      ? current
+      : contactData.contacts.find((contact: ContactItem) => contact.registered)?._id ?? "");
     setGroups(groupData.groups);
   }, [expireSession]);
+
+  useEffect(() => {
+    if (section !== "inbox" || !selectedContactId) return;
+
+    let active = true;
+    async function refreshSelectedChat() {
+      const response = await fetch(`/api/owner/feed?contactId=${encodeURIComponent(selectedContactId)}`, { cache: "no-store" });
+      if (response.status === 401) {
+        await expireSession();
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Unable to load this conversation.");
+      if (active) setSelectedChatMessages(data.messages);
+    }
+    const timer = window.setTimeout(() => {
+      void refreshSelectedChat().catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load this conversation."));
+    }, 0);
+    const interval = window.setInterval(() => {
+      void refreshSelectedChat().catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to refresh this conversation."));
+    }, 3000);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+    };
+  }, [expireSession, section, selectedContactId]);
+
+  useEffect(() => {
+    const chat = ownerChatScrollRef.current;
+    if (chat && ownerChatAtBottom.current) chat.scrollTop = chat.scrollHeight;
+  }, [selectedChatMessages]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
@@ -745,13 +788,38 @@ export function OwnerPortal() {
     await refresh();
   }
 
+  async function sendOwnerChatMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const message = chatDraft.trim();
+    if (!selectedContactId || !message) return;
+    setChatBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/owner/contacts/${selectedContactId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Message could not be sent.");
+      setSelectedChatMessages((current) => [...current, data.message]);
+      setChatDraft("");
+      ownerChatAtBottom.current = true;
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Message could not be sent.");
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
   async function submitReply(id: string) {
     const text = reply[id]?.trim();
     if (!text) return;
     try {
       await act(`/api/owner/requests/${id}/reply`, "POST", { reply: text });
       setReply((current) => ({ ...current, [id]: "" }));
-      setNotice("Reply formatted and delivered to the contact.");
+      setNotice("Your reply was sent exactly as written.");
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Reply could not be sent.");
@@ -767,6 +835,9 @@ export function OwnerPortal() {
     setMessageEditBusy(true);
     try {
       await act(`/api/owner/messages/${messageId}`, "PATCH", { text });
+      setSelectedChatMessages((current) => current.map((message) =>
+        message._id === messageId ? { ...message, text } : message
+      ));
       setEditingMessageId(null);
       setMessageEditDraft("");
       setNotice("Sent reply updated.");
@@ -987,6 +1058,21 @@ export function OwnerPortal() {
       (contactFilter === "invites" && !contact.registered);
     return matchesSearch && matchesFilter;
   });
+  const latestMessageByContact = new Map<string, FeedMessage>();
+  for (const message of feed) {
+    if (!latestMessageByContact.has(message.contactId)) latestMessageByContact.set(message.contactId, message);
+  }
+  const chatContacts = contacts
+    .filter((contact) => contact.registered)
+    .sort((a, b) => {
+      const aTime = new Date(latestMessageByContact.get(a._id)?.createdAt ?? a.lastActiveAt ?? a.createdAt ?? 0).getTime();
+      const bTime = new Date(latestMessageByContact.get(b._id)?.createdAt ?? b.lastActiveAt ?? b.createdAt ?? 0).getTime();
+      return bTime - aTime || a.name.localeCompare(b.name);
+    });
+  const activeChatContact = chatContacts.find((contact) => contact._id === selectedContactId);
+  const pendingRequests = requests
+    .filter((item) => item.status === "pending")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-8">
@@ -1032,36 +1118,135 @@ export function OwnerPortal() {
           </div>
         </form>
       </details>}
-      {(section === "inbox" || section === "activity") && <div className="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
-        {section === "inbox" && <section className={panel}>
-          <div className="mb-5 flex items-center justify-between">
-            <div><p className="text-xs uppercase tracking-[0.2em] text-red-300">ADHAVAN // INCOMING SIGNALS</p><h1 className="mt-1 text-2xl font-semibold">Your request inbox</h1></div>
-            <span className="rounded-full border border-red-400/20 bg-red-950/40 px-3 py-1 text-sm text-red-200">{requests.filter((item) => item.status === "pending").length} pending</span>
-          </div>
-          <div className="space-y-4">
-            {requests.length === 0 && <p className="text-sm text-slate-400">No requests yet. New requests will appear here.</p>}
-            {requests.map((item) => (
-              <article key={item._id} className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="font-semibold">{item.contactName}</h2><span className="rounded-full border border-white/10 px-2 py-1 text-xs capitalize text-red-100">{item.status} · {item.category}</span>
+      {section === "inbox" && <section className="glass mt-2 overflow-hidden rounded-3xl">
+        <div className={`grid h-[calc(100dvh-190px)] min-h-[420px] max-h-[850px] sm:grid-cols-[280px_minmax(0,1fr)] lg:grid-cols-[340px_minmax(0,1fr)] ${mobileChatOpen ? "grid-cols-1" : "grid-cols-1"}`}>
+          <aside className={`min-h-0 flex-col border-white/10 sm:flex sm:border-r ${mobileChatOpen ? "hidden" : "flex"}`}>
+            <div className="border-b border-white/10 px-4 py-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-red-300">CONTACTS</p>
+              <h1 className="mt-1 text-xl font-semibold">Chats</h1>
+              <p className="mt-1 text-xs text-slate-400">{chatContacts.length} registered users</p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {chatContacts.length === 0 && <p className="p-5 text-sm text-slate-400">Registered users will appear here.</p>}
+              {chatContacts.map((contact) => {
+                const latest = latestMessageByContact.get(contact._id);
+                const isSelected = selectedContactId === contact._id;
+                return (
+                  <button
+                    key={contact._id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedContactId(contact._id);
+                      setMobileChatOpen(true);
+                      setSelectedChatMessages([]);
+                      ownerChatAtBottom.current = true;
+                    }}
+                    aria-current={isSelected ? "true" : undefined}
+                    className={`flex min-h-[76px] w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition ${isSelected ? "bg-red-950/45" : "hover:bg-white/[0.04]"}`}
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-red-300/20 bg-red-950/55 font-semibold text-red-100">{contact.name.slice(0, 1).toUpperCase()}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium text-white">{contact.name}</span>
+                        {latest && <time className="shrink-0 text-[10px] text-slate-500">{new Date(latest.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-slate-400">{contact.disabled ? "Account disabled" : latest?.text ?? `@${contact.username}`}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+          <section className={`min-h-0 flex-col ${mobileChatOpen ? "flex" : "hidden sm:flex"}`}>
+            {activeChatContact ? (
+              <>
+                <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-3">
+                  <button type="button" onClick={() => setMobileChatOpen(false)} aria-label="Back to chats" className="rounded-lg p-2 text-red-200 hover:bg-white/5 sm:hidden">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5"><path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-red-300/20 bg-red-950/55 font-semibold text-red-100">{activeChatContact.name.slice(0, 1).toUpperCase()}</span>
+                  <div className="min-w-0">
+                    <h2 className="truncate font-semibold">{activeChatContact.name}</h2>
+                    <p className="truncate text-xs text-slate-400">@{activeChatContact.username}{activeChatContact.disabled ? " · Disabled" : ""}</p>
+                  </div>
+                </header>
+                <div
+                  ref={ownerChatScrollRef}
+                  onScroll={(event) => {
+                    const chat = event.currentTarget;
+                    ownerChatAtBottom.current = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 48;
+                  }}
+                  className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
+                  aria-live="polite"
+                >
+                  {selectedChatMessages.length === 0 && <p className="py-6 text-center text-sm text-slate-400">No messages in this conversation yet.</p>}
+                  {selectedChatMessages.map((message) => (
+                    <article key={message._id} className={`flex max-w-[88%] flex-col ${message.role === "owner" ? "ml-auto items-end" : "items-start"}`}>
+                      <div className={`rounded-2xl border px-4 py-3 ${message.role === "owner" ? "border-red-400/20 bg-red-950/55" : message.role === "user" ? "border-white/10 bg-black/50" : "border-white/5 bg-slate-950/70"}`}>
+                        <div className="mb-1 flex items-center gap-2 text-[10px] text-slate-400">
+                          <span>{message.role === "owner" ? "You" : message.role === "user" ? activeChatContact.name : "Assistant"}</span>
+                          <time>{new Date(message.createdAt).toLocaleString()}</time>
+                        </div>
+                        {editingMessageId === message._id ? (
+                          <div className="space-y-2">
+                            <label htmlFor={`edit-chat-${message._id}`} className="sr-only">Edit sent message</label>
+                            <textarea id={`edit-chat-${message._id}`} value={messageEditDraft} onChange={(event) => setMessageEditDraft(event.target.value)} maxLength={4000} rows={3} className={`${field} min-w-[220px] resize-y`} />
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => void saveSentMessage(message._id)} disabled={messageEditBusy || !messageEditDraft.trim()} className={`${button} py-2 text-xs`}>{messageEditBusy ? "Saving…" : "Save edit"}</button>
+                              <button type="button" onClick={() => { setEditingMessageId(null); setMessageEditDraft(""); }} disabled={messageEditBusy} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-300">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.text}</p>
+                        )}
+                      </div>
+                      {message.role === "owner" && editingMessageId !== message._id && (
+                        <button type="button" onClick={() => { setEditingMessageId(message._id); setMessageEditDraft(message.text); setError(""); }} className="mt-1 px-2 py-1 text-[10px] text-red-200 hover:text-white">Edit sent message</button>
+                      )}
+                    </article>
+                  ))}
                 </div>
-                <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">{item.summary}</p>
-                <p className="mt-2 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
-                {item.status === "pending" && (
-                  <>
-                    <label className="sr-only" htmlFor={`reply-${item._id}`}>Write a reply to {item.contactName}</label>
-                    <textarea id={`reply-${item._id}`} value={reply[item._id] ?? ""} onChange={(event) => setReply((current) => ({ ...current, [item._id]: event.target.value }))} maxLength={4000} rows={3} placeholder="Write your reply. It will be formatted and delivered in the user's chat." className={`${field} mt-4 resize-y`} />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button onClick={() => void submitReply(item._id)} disabled={!reply[item._id]?.trim()} className={button}>Format & send</button>
-                      <button onClick={() => void act(`/api/owner/requests/${item._id}/deny`, "POST").catch((reason) => setError(reason.message))} className="rounded-xl border border-red-300/25 px-4 py-3 text-sm text-red-200">Decline</button>
-                    </div>
-                  </>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>}
-        {section === "activity" && <section className={panel}>
+                <form onSubmit={sendOwnerChatMessage} className="flex shrink-0 items-end gap-2 border-t border-white/10 p-3 sm:p-4">
+                  <label htmlFor="owner-chat-message" className="sr-only">Write a message to {activeChatContact.name}</label>
+                  <textarea id="owner-chat-message" value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} rows={1} maxLength={4000} disabled={activeChatContact.disabled} placeholder={activeChatContact.disabled ? "This account is disabled" : "Write a message…"} className={`${field} min-w-0 flex-1 resize-none py-2.5`} />
+                  <button disabled={chatBusy || activeChatContact.disabled || !chatDraft.trim()} className={`${button} shrink-0 px-4 py-2.5`}>{chatBusy ? "…" : "Send"}</button>
+                </form>
+              </>
+            ) : (
+              <div className="hidden h-full flex-col items-center justify-center p-8 text-center sm:flex">
+                <span className="flex h-16 w-16 items-center justify-center rounded-full border border-red-300/15 bg-red-950/35 text-2xl text-red-200">✦</span>
+                <h2 className="mt-4 text-lg font-semibold">Your conversations</h2>
+                <p className="mt-1 max-w-xs text-sm text-slate-400">Choose a user from the list to read the conversation and send a reply.</p>
+              </div>
+            )}
+          </section>
+        </div>
+      </section>}
+      {section === "requests" && <section className={`${panel} mt-2`}>
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div><p className="text-xs uppercase tracking-[0.2em] text-red-300">NEEDS YOUR ATTENTION</p><h1 className="mt-1 text-2xl font-semibold">Pending requests</h1></div>
+          <span className="rounded-full border border-red-400/20 bg-red-950/40 px-3 py-1 text-sm text-red-200">{pendingRequests.length} pending</span>
+        </div>
+        <div className="space-y-4">
+          {pendingRequests.length === 0 && <p className="rounded-xl border border-white/10 bg-black/25 p-5 text-sm text-slate-400">No pending requests. New requests will appear here, newest first.</p>}
+          {pendingRequests.map((item) => (
+            <article key={item._id} className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">{item.contactName}</h2><span className="rounded-full border border-white/10 px-2 py-1 text-xs capitalize text-red-100">{item.category}</span>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">{item.summary}</p>
+              <p className="mt-2 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
+              <label className="sr-only" htmlFor={`reply-${item._id}`}>Write a reply to {item.contactName}</label>
+              <textarea id={`reply-${item._id}`} value={reply[item._id] ?? ""} onChange={(event) => setReply((current) => ({ ...current, [item._id]: event.target.value }))} maxLength={4000} rows={3} placeholder="Write your reply. It will be formatted and delivered in the user's chat." className={`${field} mt-4 resize-y`} />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => void submitReply(item._id)} disabled={!reply[item._id]?.trim()} className={button}>Send reply</button>
+                <button onClick={() => void act(`/api/owner/requests/${item._id}/deny`, "POST").catch((reason) => setError(reason.message))} className="rounded-xl border border-red-300/25 px-4 py-3 text-sm text-red-200">Decline</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>}
+      {section === "activity" && <section className={`${panel} mt-2`}>
           <p className="text-xs uppercase tracking-[0.2em] text-red-300">NEURAL ACTIVITY STREAM</p>
           <h2 className="mt-1 text-2xl font-semibold">Your live message feed</h2>
           <div className="mt-5 max-h-[75vh] space-y-3 overflow-y-auto">
@@ -1090,7 +1275,6 @@ export function OwnerPortal() {
             </article>)}
           </div>
         </section>}
-      </div>}
       {section === "users" && <section className={`${panel} mt-5`}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
