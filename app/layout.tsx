@@ -16,6 +16,13 @@ export const metadata: Metadata = {
   title: "ADHAVAN | Personal AI",
   description: "ADHAVAN's personal AI command center for private contact requests and replies.",
   manifest: "/site.webmanifest",
+  icons: {
+    icon: [
+      { url: "/adhavan-app-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/adhavan-app-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/adhavan-apple-icon-180.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {
