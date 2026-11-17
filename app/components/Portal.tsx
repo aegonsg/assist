@@ -43,7 +43,7 @@ const userSections: { id: UserSection; label: string }[] = [
 ];
 const userSectionIds: readonly UserSection[] = ["chat", "requests", "groups", "saved"];
 const ownerSections: { id: OwnerSection; label: string }[] = [
-  { id: "inbox", label: "Chats" },
+  { id: "inbox", label: "Messages" },
   { id: "requests", label: "Pending requests" },
   { id: "activity", label: "Message activity" },
   { id: "users", label: "User management" },
@@ -790,8 +790,8 @@ export function OwnerPortal() {
 
   async function sendOwnerChatMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const message = chatDraft.trim();
-    if (!selectedContactId || !message) return;
+    if (!selectedContactId || !chatDraft.trim()) return;
+    const message = chatDraft;
     setChatBusy(true);
     setError("");
     try {
@@ -1091,6 +1091,25 @@ export function OwnerPortal() {
           { id: "logout", label: "Log out", onClick: () => void expireSession(), danger: true },
         ]}
       />
+      <nav aria-label="Owner conversations" className="mb-3 grid grid-cols-2 gap-2 sm:hidden">
+        <button
+          type="button"
+          aria-current={section === "inbox" ? "page" : undefined}
+          onClick={() => { navigate("inbox"); setMobileChatOpen(false); }}
+          className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-medium transition ${section === "inbox" ? "border-red-300/35 bg-red-950/60 text-red-100" : "border-white/10 bg-black/25 text-slate-300"}`}
+        >
+          Messages
+        </button>
+        <button
+          type="button"
+          aria-current={section === "requests" ? "page" : undefined}
+          onClick={() => { navigate("requests"); setMobileChatOpen(false); }}
+          className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${section === "requests" ? "border-red-300/35 bg-red-950/60 text-red-100" : "border-white/10 bg-black/25 text-slate-300"}`}
+        >
+          Pending requests
+          {pendingRequests.length > 0 && <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-semibold text-black">{pendingRequests.length}</span>}
+        </button>
+      </nav>
       {notice && <p className="mb-4 rounded-xl border border-red-300/30 bg-red-950/50 p-3 text-sm text-red-100">{notice}</p>}
       {error && <ErrorText>{error}</ErrorText>}
       {section === "settings" && <details open className={`${panel} mb-5`}>
@@ -1136,9 +1155,11 @@ export function OwnerPortal() {
                     key={contact._id}
                     type="button"
                     onClick={() => {
-                      setSelectedContactId(contact._id);
+                      if (selectedContactId !== contact._id) {
+                        setSelectedContactId(contact._id);
+                        setSelectedChatMessages([]);
+                      }
                       setMobileChatOpen(true);
-                      setSelectedChatMessages([]);
                       ownerChatAtBottom.current = true;
                     }}
                     aria-current={isSelected ? "true" : undefined}
