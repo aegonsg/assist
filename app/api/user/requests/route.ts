@@ -25,11 +25,11 @@ export async function GET() {
     if (message.role !== "owner" || !message.requestId) return message;
     const request = requestMap.get(String(message.requestId));
     if (request?.category !== "sensitive") return message;
-    const claimed = await db.collection("requests").updateOne(
+    await db.collection("requests").updateOne(
       { _id: request._id, userViewedAt: { $exists: false } },
       { $set: { userViewedAt: now } }
     );
-    return claimed.modifiedCount ? message : { ...message, text: "Delivered" };
+    return message;
   }));
   const safeRequests = requests.map((item) => {
     const safeItem = { ...item };
