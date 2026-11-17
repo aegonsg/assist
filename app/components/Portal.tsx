@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
-type Message = { _id: string; role: string; text: string; createdAt: string };
+type Message = { _id: string; role: string; text: string; createdAt: string; requestId?: string };
 type SavedMessage = {
   _id: string;
   sourceType: "chat" | "group";
@@ -517,6 +517,9 @@ export function UserPortal() {
             {messages.map((message) => {
               const isSelected = selectedMessageId === message._id;
               const isSaved = savedBySource.has(`chat:${message._id}`);
+              const isSensitiveReply = message.role === "owner"
+                && message.requestId
+                && requests.some((request) => request._id === message.requestId && request.category === "sensitive");
               return (
                 <article key={message._id} className={`flex max-w-[85%] flex-col ${message.role === "user" ? "ml-auto items-end" : "items-start"}`}>
                   <button
@@ -528,7 +531,7 @@ export function UserPortal() {
                     <span className="mb-1 block text-xs capitalize text-slate-400">{message.role === "owner" ? "Owner reply" : message.role === "bot" ? "Assistant" : "You"}</span>
                     <span className="block whitespace-pre-wrap break-words text-sm leading-6">{message.text}</span>
                   </button>
-                  {isSelected && message.text !== "Delivered" && (
+                  {isSelected && !isSensitiveReply && (
                     <button
                       type="button"
                       onClick={() => void toggleSavedMessage("chat", message._id)}
@@ -895,10 +898,6 @@ export function OwnerPortal() {
     event.preventDefault();
     if (!userEditor || userEditDraft.name.trim().length < 2 || userEditDraft.username.trim().length < 3) {
       setError("Enter a name with at least 2 characters and a username with at least 3 characters.");
-      return;
-    }
-    if (userEditDraft.password && userEditDraft.password.length < 10) {
-      setError("A new password must be at least 10 characters.");
       return;
     }
     setUserEditBusy(true);
@@ -1314,8 +1313,8 @@ export function OwnerPortal() {
           <label className="text-sm text-slate-300">Username
             <input className={`${field} mt-1`} name="username" required minLength={3} maxLength={64} pattern="[a-zA-Z0-9._-]+" autoCapitalize="none" autoComplete="off" />
           </label>
-          <label className="text-sm text-slate-300 sm:col-span-2">Initial password (10–128 characters)
-            <input className={`${field} mt-1`} name="password" type="password" required minLength={10} maxLength={128} autoComplete="new-password" />
+          <label className="text-sm text-slate-300 sm:col-span-2">Initial password
+            <input className={`${field} mt-1`} name="password" type="password" required maxLength={128} autoComplete="new-password" />
           </label>
           <p className="text-xs text-slate-500 sm:col-span-2">The account is created immediately. Passwords are saved securely as hashes.</p>
           <button className={`${button} w-full sm:col-span-2`}>Create account</button>
@@ -1401,14 +1400,14 @@ export function OwnerPortal() {
               <input value={userEditDraft.username} onChange={(event) => setUserEditDraft((draft) => ({ ...draft, username: event.target.value }))} required minLength={3} maxLength={64} pattern="[a-zA-Z0-9._-]+" autoCapitalize="none" autoComplete="username" className={`${field} mt-1`} />
             </label>
             <label className="block text-sm text-slate-300">{userEditor.registered ? "New password (optional)" : "Set password to activate account"}
-              <input value={userEditDraft.password} onChange={(event) => setUserEditDraft((draft) => ({ ...draft, password: event.target.value }))} type="password" minLength={userEditDraft.password ? 10 : undefined} maxLength={128} autoComplete="new-password" placeholder="Leave blank to keep current password" className={`${field} mt-1`} />
+              <input value={userEditDraft.password} onChange={(event) => setUserEditDraft((draft) => ({ ...draft, password: event.target.value }))} type="password" maxLength={128} autoComplete="new-password" placeholder="Leave blank to keep current password" className={`${field} mt-1`} />
             </label>
             <p className="text-xs leading-5 text-slate-500">{userEditDraft.password
               ? "Saving a password securely updates its hash and signs out this user on all devices."
               : "Passwords are never shown. Enter a new password only when you want to replace the current one."}</p>
             <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setUserEditor(null)} className="rounded-xl border border-white/15 px-4 py-3 text-sm text-slate-200">Cancel</button>
-              <button type="submit" disabled={userEditBusy || (Boolean(userEditDraft.password) && userEditDraft.password.length < 10)} className={`${button} sm:min-w-36`}>{userEditBusy ? "Saving…" : "Save changes"}</button>
+              <button type="submit" disabled={userEditBusy} className={`${button} sm:min-w-36`}>{userEditBusy ? "Saving…" : "Save changes"}</button>
             </div>
           </form>
         </section>

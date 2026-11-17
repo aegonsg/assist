@@ -25,11 +25,22 @@ export async function GET() {
     if (message.role !== "owner" || !message.requestId) return message;
     const request = requestMap.get(String(message.requestId));
     if (request?.category !== "sensitive") return message;
-    await db.collection("requests").updateOne(
-      { _id: request._id, userViewedAt: { $exists: false } },
-      { $set: { userViewedAt: now } }
-    );
-    return message;
+    const updates: Promise<unknown>[] = [
+      db.collection("requests").updateOne(
+        { _id: request._id, userViewedAt: { $exists: false } },
+        { $set: { userViewedAt: now } }
+      ),
+    ];
+    let visibleMessage = message;
+    if (typeof request.ownerReply === "string" && message.text !== request.ownerReply) {
+      updates.push(db.collection("messages").updateOne(
+        { _id: message._id, role: "owner" },
+        { $set: { text: request.ownerReply } }
+      ));
+      visibleMessage = { ...message, text: request.ownerReply };
+    }
+    await Promise.all(updates);
+    return visibleMessage;
   }));
   const safeRequests = requests.map((item) => {
     const safeItem = { ...item };

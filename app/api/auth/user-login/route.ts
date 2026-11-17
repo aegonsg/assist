@@ -8,7 +8,7 @@ import { clearLoginAttempts, isLoginRateLimited, recordLoginFailure } from "@/li
 
 const schema = z.object({
   username: z.string().trim().min(3).max(64),
-  password: z.string().min(8).max(128),
+  password: z.string().min(1).max(128),
 });
 
 export async function POST(request: Request) {

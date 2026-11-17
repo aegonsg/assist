@@ -10,13 +10,13 @@ const schema = z.object({
   token: z.string().min(20).max(100),
   name: z.string().trim().min(2).max(80),
   username: z.string().trim().min(3).max(64).regex(/^[a-zA-Z0-9._-]+$/),
-  password: z.string().min(10).max(128),
+  password: z.string().min(1).max(128),
 });
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Check the form. Passwords must be at least 10 characters." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Check the form and enter a password." }, { status: 400 });
   const db = await getDb();
   const contacts = db.collection<Document & { _id: string }>("contacts");
   const inviteTokenHash = createHash("sha256").update(parsed.data.token).digest("hex");
