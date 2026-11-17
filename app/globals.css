@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+  --background: #080606;
+  --foreground: #f7eeee;
+  --muted: #c5aaaa;
+  --red: #ff332b;
+  --red-bright: #ff594f;
+  --red-dim: #a81e1a;
 }
 
 @theme inline {
@@ -12,15 +17,205 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* { box-sizing: border-box; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--foreground);
+  background:
+    linear-gradient(180deg, rgba(7, 4, 4, .66), rgba(8, 4, 4, .84)),
+    url("/adhavan-bike.png") center 35% / cover fixed,
+    #080606;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255, 35, 25, .08), transparent 60%),
+    linear-gradient(90deg, rgba(5, 3, 3, .72), rgba(7, 3, 3, .28) 50%, rgba(5, 3, 3, .7));
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+.glass {
+  border: 1px solid rgba(255, 65, 55, .28);
+  background: rgba(12, 8, 8, .83);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .52), inset 0 1px rgba(255, 100, 90, .06);
+  backdrop-filter: blur(18px);
+}
+
+.ai-mark {
+  color: var(--red-bright);
+  filter: drop-shadow(0 0 10px rgba(255, 45, 35, .58));
+}
+
+.red-glow {
+  text-shadow: 0 0 24px rgba(255, 45, 35, .38);
+}
+
+.ai-visual {
+  position: relative;
+  height: 270px;
+  overflow: hidden;
+  isolation: isolate;
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+
+.ai-visual-grid {
+  position: absolute;
+  inset: 20% 5%;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(255, 60, 50, .09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 60, 50, .09) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: radial-gradient(ellipse, #000 10%, transparent 72%);
+  transform: perspective(300px) rotateX(55deg) scale(1.35);
+}
+
+.ai-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid rgba(255, 72, 62, .28);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.ai-orbit-outer {
+  width: 215px;
+  height: 215px;
+  animation: orbit-spin 24s linear infinite;
+}
+
+.ai-orbit-middle {
+  width: 165px;
+  height: 165px;
+  border-style: dashed;
+  border-color: rgba(255, 72, 62, .44);
+  animation: orbit-spin 18s linear infinite reverse;
+}
+
+.ai-orbit-inner {
+  width: 116px;
+  height: 116px;
+  border-color: rgba(255, 72, 62, .2);
+  box-shadow: 0 0 50px rgba(255, 35, 25, .16), inset 0 0 32px rgba(255, 35, 25, .12);
+  animation: core-breathe 4s ease-in-out infinite;
+}
+
+.ai-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 88px;
+  height: 88px;
+  place-items: center;
+  border: 1px solid rgba(255, 85, 75, .5);
+  border-radius: 28px;
+  background: linear-gradient(145deg, rgba(55, 10, 10, .95), rgba(8, 6, 6, .96));
+  box-shadow: 0 0 42px rgba(255, 35, 25, .25), inset 0 0 20px rgba(255, 70, 60, .12);
+  transform: translate(-50%, -50%) rotate(45deg);
+  animation: core-float 5s ease-in-out infinite;
+}
+
+.ai-core svg { transform: rotate(-45deg); }
+
+.ai-signal {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 75, 65, .25);
+  border-radius: 999px;
+  background: rgba(8, 5, 5, .82);
+  color: rgba(255, 225, 222, .82);
+  font: 600 9px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .12em;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .35);
+  animation: signal-float 5s ease-in-out infinite;
+}
+
+.ai-signal-left { top: 34%; left: 8%; }
+.ai-signal-right { top: 31%; right: 7%; animation-delay: -1.7s; }
+.ai-signal-bottom { bottom: 12%; left: 50%; transform: translateX(-50%); animation-delay: -3.2s; }
+.signal-glyph, .capability-icon { color: #ff594f; font-size: 15px; }
+
+.ai-node {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff594f;
+  box-shadow: 0 0 14px #ff332b;
+  animation: node-pulse 2.4s ease-in-out infinite;
+}
+
+.ai-node-one { top: 25%; left: 31%; }
+.ai-node-two { top: 62%; right: 28%; animation-delay: -.8s; }
+.ai-node-three { top: 27%; right: 34%; animation-delay: -1.5s; }
+
+.ai-capability {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 5px;
+  border: 1px solid rgba(255, 65, 55, .16);
+  border-radius: 14px;
+  background: rgba(10, 6, 6, .65);
+  color: rgba(255, 240, 238, .72);
+  text-align: center;
+  font-size: 10px;
+}
+
+.capability-icon { font-size: 18px; }
+
+@keyframes orbit-spin { to { rotate: 360deg; } }
+@keyframes core-breathe { 50% { scale: 1.08; opacity: .7; } }
+@keyframes core-float { 50% { translate: 0 -7px; } }
+@keyframes signal-float { 50% { margin-top: -5px; } }
+@keyframes node-pulse { 50% { opacity: .35; scale: .65; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+@media (max-width: 700px) {
+  body { background-attachment: scroll; background-position: 55% center; }
+  .ai-visual { height: 210px; }
+  .ai-orbit-outer { width: 175px; height: 175px; }
+  .ai-orbit-middle { width: 135px; height: 135px; }
+  .ai-orbit-inner { width: 98px; height: 98px; }
+  .ai-core { width: 72px; height: 72px; border-radius: 22px; }
+  .ai-signal { gap: 5px; padding: 8px; font-size: 7px; letter-spacing: .08em; }
+  .ai-signal-left { top: 25%; left: 1%; }
+  .ai-signal-right { top: 25%; right: 1%; }
+  .ai-signal-bottom { bottom: 7%; }
+  .ai-node-one { left: 20%; }
+  .ai-node-two { right: 18%; }
+  .ai-node-three { right: 25%; }
+  .ai-capability { min-height: 72px; border-radius: 12px; font-size: 9px; line-height: 1.3; }
+}
+
+@media (max-width: 360px) {
+  .ai-signal-left { left: -3%; }
+  .ai-signal-right { right: -3%; }
+  .ai-capability { font-size: 8px; }
 }

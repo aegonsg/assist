@@ -1,0 +1,12 @@
+{
+  "name": "Signal Vault",
+  "short_name": "Signal Vault",
+  "description": "Personal assistant for private requests",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060816",
+  "theme_color": "#0b1120",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
