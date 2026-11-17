@@ -90,7 +90,7 @@ function SectionNavigation<T extends string>({
   const [menuOpen, setMenuOpen] = useState(false);
   const currentLabel = sections.find((section) => section.id === active)?.label;
   return (
-    <div className="mb-5 space-y-3">
+    <div className="mb-2 space-y-1 sm:mb-5 sm:space-y-3">
       <div className="relative">
         <nav aria-label="Dashboard menu" className="glass hidden gap-2 overflow-x-auto rounded-2xl p-2 sm:flex">
           {sections.map((section) => (
@@ -167,7 +167,7 @@ function SectionNavigation<T extends string>({
           )}
         </div>
       </div>
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 px-1 text-xs text-slate-400 sm:text-sm">
+      <nav aria-label="Breadcrumb" className={`${active === "chat" ? "hidden sm:flex" : "flex"} items-center gap-2 px-1 text-xs text-slate-400 sm:text-sm`}>
         <button type="button" onClick={() => onNavigate(defaultSection)} className="transition hover:text-red-200">Dashboard</button>
         <span aria-hidden="true">/</span>
         <span aria-current="page" className="text-red-100">{currentLabel}</span>
@@ -480,9 +480,9 @@ export function UserPortal() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-[0.2em] text-red-100"><NeuralMark className="h-8 w-8" /> ADHAVAN<span className="text-red-500">.AI</span></Link>
+    <main className="mx-auto min-h-dvh max-w-7xl px-3 py-2 sm:min-h-screen sm:px-8 sm:py-6">
+      <header className="mb-2 flex flex-wrap items-center justify-between gap-3 sm:mb-6">
+        <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-[0.2em] text-red-100 sm:text-base"><NeuralMark className="h-6 w-6 sm:h-8 sm:w-8" /> ADHAVAN<span className="text-red-500">.AI</span></Link>
       </header>
       <SectionNavigation
         sections={userSections}
@@ -498,20 +498,20 @@ export function UserPortal() {
       {notice && <p className="mb-4 rounded-xl border border-red-300/30 bg-red-950/50 p-3 text-sm text-red-100">{notice}</p>}
       {error && <ErrorText>{error}</ErrorText>}
       {(section === "chat" || section === "requests") && <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-        {section === "chat" && <section className={`${panel} flex h-[calc(100svh-220px)] min-h-[340px] max-h-[780px] flex-col overflow-hidden lg:h-[72vh] lg:min-h-[560px]`}>
-          <div className="border-b border-white/10 pb-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-red-300">PRIVATE LINK // ADHAVAN</p>
-            <h1 className="mt-1 text-2xl font-semibold">Chat with ADHAVAN&apos;s assistant</h1>
-          </div>
+        {section === "chat" && <section className={`glass flex h-[calc(100dvh-108px)] min-h-[340px] max-h-[780px] flex-col overflow-hidden rounded-3xl p-2 sm:p-6 lg:h-[72vh] lg:min-h-[560px]`}>
           <div
             ref={chatScrollRef}
             onScroll={(event) => {
               const chat = event.currentTarget;
               shouldScrollToBottom.current = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 48;
             }}
-            className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-5"
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2 sm:py-5"
             aria-live="polite"
           >
+            <div className="mb-2 border-b border-white/10 pb-2">
+              <p className="hidden text-xs uppercase tracking-[0.2em] text-red-300 sm:block">PRIVATE LINK // ADHAVAN</p>
+              <h1 className="text-sm font-semibold text-slate-200 sm:mt-1 sm:text-2xl">Chat with ADHAVAN&apos;s assistant</h1>
+            </div>
             {messages.length === 0 && <p className="text-sm text-slate-400">No messages yet. Send a message to get started.</p>}
             {messages.map((message) => {
               const isSelected = selectedMessageId === message._id;
@@ -542,10 +542,10 @@ export function UserPortal() {
               );
             })}
           </div>
-          <form onSubmit={send} className="shrink-0 flex flex-col gap-2 border-t border-white/10 pt-4 pb-[env(safe-area-inset-bottom)] sm:flex-row">
+          <form onSubmit={send} className="flex shrink-0 flex-row items-end gap-2 border-t border-white/10 pt-2 pb-[env(safe-area-inset-bottom)] sm:pt-4">
             <label htmlFor="chat-message" className="sr-only">Your message</label>
-            <textarea id="chat-message" value={text} onChange={(event) => setText(event.target.value)} rows={2} maxLength={2000} placeholder="Ask anything…" className={`${field} resize-none`} />
-            <button disabled={busy || !text.trim()} className={`${button} sm:self-end`}>{busy ? "…" : "Send"}</button>
+            <textarea id="chat-message" value={text} onChange={(event) => setText(event.target.value)} rows={1} maxLength={2000} placeholder="Ask anything…" className={`${field} min-w-0 flex-1 resize-none py-2.5 sm:py-3`} />
+            <button disabled={busy || !text.trim()} className={`${button} shrink-0 px-4 py-2.5 sm:py-3`}>{busy ? "…" : "Send"}</button>
           </form>
           {error && <ErrorText>{error}</ErrorText>}
         </section>}
