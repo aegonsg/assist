@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type Message = { _id: string; role: string; text: string; createdAt: string };
 type SavedMessage = {
@@ -347,6 +347,9 @@ export function UserPortal() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [savingMessageIds, setSavingMessageIds] = useState<string[]>([]);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const shouldScrollToBottom = useRef(true);
 
   const expireSession = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -374,6 +377,11 @@ export function UserPortal() {
   }, [expireSession]);
 
   const savedBySource = new Map(savedMessages.map((saved) => [`${saved.sourceType}:${saved.sourceMessageId}`, saved]));
+
+  useEffect(() => {
+    const chat = chatScrollRef.current;
+    if (chat && shouldScrollToBottom.current) chat.scrollTop = chat.scrollHeight;
+  }, [messages]);
 
   async function toggleSavedMessage(sourceType: "chat" | "group", messageId: string, groupId?: string) {
     const saved = savedBySource.get(`${sourceType}:${messageId}`);
@@ -423,6 +431,7 @@ export function UserPortal() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Message could not be sent.");
       setText("");
+      shouldScrollToBottom.current = true;
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Message could not be sent.");
@@ -489,26 +498,51 @@ export function UserPortal() {
       {notice && <p className="mb-4 rounded-xl border border-red-300/30 bg-red-950/50 p-3 text-sm text-red-100">{notice}</p>}
       {error && <ErrorText>{error}</ErrorText>}
       {(section === "chat" || section === "requests") && <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-        {section === "chat" && <section className={`${panel} flex min-h-[72vh] flex-col`}>
+        {section === "chat" && <section className={`${panel} flex h-[calc(100svh-220px)] min-h-[340px] max-h-[780px] flex-col overflow-hidden lg:h-[72vh] lg:min-h-[560px]`}>
           <div className="border-b border-white/10 pb-4">
             <p className="text-xs uppercase tracking-[0.2em] text-red-300">PRIVATE LINK // ADHAVAN</p>
             <h1 className="mt-1 text-2xl font-semibold">Chat with ADHAVAN&apos;s assistant</h1>
           </div>
-          <div className="flex-1 space-y-3 overflow-y-auto py-5" aria-live="polite">
+          <div
+            ref={chatScrollRef}
+            onScroll={(event) => {
+              const chat = event.currentTarget;
+              shouldScrollToBottom.current = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 48;
+            }}
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-5"
+            aria-live="polite"
+          >
             {messages.length === 0 && <p className="text-sm text-slate-400">No messages yet. Send a message to get started.</p>}
-            {messages.map((message) => (
-              <article key={message._id} className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === "user" ? "ml-auto border border-red-500/20 bg-red-950/60" : message.role === "owner" ? "border border-red-300/35 bg-red-950/45" : "border border-white/5 bg-black/70"}`}>
-                <div className="mb-1 flex items-center justify-between gap-3">
-                  <p className="text-xs capitalize text-slate-400">{message.role === "owner" ? "Owner reply" : message.role === "bot" ? "Assistant" : "You"}</p>
-                  {message.text !== "Delivered" && <button type="button" onClick={() => void toggleSavedMessage("chat", message._id)} disabled={savingMessageIds.includes(message._id)} aria-label={savedBySource.has(`chat:${message._id}`) ? "Remove saved message" : "Save message"} className="text-xs text-red-200 transition hover:text-white disabled:opacity-50">
-                    {savedBySource.has(`chat:${message._id}`) ? "Saved" : "Save"}
-                  </button>}
-                </div>
-                <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.text}</p>
-              </article>
-            ))}
+            {messages.map((message) => {
+              const isSelected = selectedMessageId === message._id;
+              const isSaved = savedBySource.has(`chat:${message._id}`);
+              return (
+                <article key={message._id} className={`flex max-w-[85%] flex-col ${message.role === "user" ? "ml-auto items-end" : "items-start"}`}>
+                  <button
+                    type="button"
+                    aria-expanded={isSelected}
+                    onClick={() => setSelectedMessageId(isSelected ? null : message._id)}
+                    className={`rounded-2xl px-4 py-3 text-left ${message.role === "user" ? "border border-red-500/20 bg-red-950/60" : message.role === "owner" ? "border border-red-300/35 bg-red-950/45" : "border border-white/5 bg-black/70"}`}
+                  >
+                    <span className="mb-1 block text-xs capitalize text-slate-400">{message.role === "owner" ? "Owner reply" : message.role === "bot" ? "Assistant" : "You"}</span>
+                    <span className="block whitespace-pre-wrap break-words text-sm leading-6">{message.text}</span>
+                  </button>
+                  {isSelected && message.text !== "Delivered" && (
+                    <button
+                      type="button"
+                      onClick={() => void toggleSavedMessage("chat", message._id)}
+                      disabled={savingMessageIds.includes(message._id)}
+                      aria-label={isSaved ? "Remove saved message" : "Save message"}
+                      className="mt-1 rounded-full border border-red-300/20 bg-black/50 px-3 py-1 text-xs text-red-200 transition hover:text-white disabled:opacity-50"
+                    >
+                      {isSaved ? "Saved · Remove" : "Save message"}
+                    </button>
+                  )}
+                </article>
+              );
+            })}
           </div>
-          <form onSubmit={send} className="flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row">
+          <form onSubmit={send} className="shrink-0 flex flex-col gap-2 border-t border-white/10 pt-4 pb-[env(safe-area-inset-bottom)] sm:flex-row">
             <label htmlFor="chat-message" className="sr-only">Your message</label>
             <textarea id="chat-message" value={text} onChange={(event) => setText(event.target.value)} rows={2} maxLength={2000} placeholder="Ask anything…" className={`${field} resize-none`} />
             <button disabled={busy || !text.trim()} className={`${button} sm:self-end`}>{busy ? "…" : "Send"}</button>
@@ -557,14 +591,21 @@ export function UserPortal() {
                   <div className="my-4 max-h-80 min-h-32 space-y-3 overflow-y-auto" aria-live="polite">
                     {group.messages.length === 0 && <p className="text-sm text-slate-400">No group messages yet. Start the conversation.</p>}
                     {group.messages.map((message) => (
-                      <article key={message._id} className={`max-w-[90%] rounded-2xl border px-4 py-3 ${message.senderId === userId ? "ml-auto border-red-500/25 bg-red-950/50" : "border-white/10 bg-black/50"}`}>
-                        <div className="mb-1 flex items-center justify-between gap-3">
-                          <p className="text-xs text-red-200">{message.senderName} · {new Date(message.createdAt).toLocaleTimeString()}</p>
-                          <button type="button" onClick={() => void toggleSavedMessage("group", message._id, group._id)} disabled={savingMessageIds.includes(message._id)} aria-label={savedBySource.has(`group:${message._id}`) ? "Remove saved message" : "Save message"} className="text-xs text-red-200 transition hover:text-white disabled:opacity-50">
-                            {savedBySource.has(`group:${message._id}`) ? "Saved" : "Save"}
+                      <article key={message._id} className={`flex max-w-[90%] flex-col ${message.senderId === userId ? "ml-auto items-end" : "items-start"}`}>
+                        <button
+                          type="button"
+                          aria-expanded={selectedMessageId === message._id}
+                          onClick={() => setSelectedMessageId(selectedMessageId === message._id ? null : message._id)}
+                          className={`rounded-2xl border px-4 py-3 text-left ${message.senderId === userId ? "border-red-500/25 bg-red-950/50" : "border-white/10 bg-black/50"}`}
+                        >
+                          <span className="mb-1 block text-xs text-red-200">{message.senderName} · {new Date(message.createdAt).toLocaleTimeString()}</span>
+                          <span className="block whitespace-pre-wrap break-words text-sm leading-6">{message.text}</span>
+                        </button>
+                        {selectedMessageId === message._id && (
+                          <button type="button" onClick={() => void toggleSavedMessage("group", message._id, group._id)} disabled={savingMessageIds.includes(message._id)} aria-label={savedBySource.has(`group:${message._id}`) ? "Remove saved message" : "Save message"} className="mt-1 rounded-full border border-red-300/20 bg-black/50 px-3 py-1 text-xs text-red-200 transition hover:text-white disabled:opacity-50">
+                            {savedBySource.has(`group:${message._id}`) ? "Saved · Remove" : "Save message"}
                           </button>
-                        </div>
-                        <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.text}</p>
+                        )}
                       </article>
                     ))}
                   </div>
@@ -584,7 +625,7 @@ export function UserPortal() {
         <h2 className="mt-1 text-xl font-semibold">Saved messages</h2>
         <p className="mt-2 text-sm text-slate-400">Saved messages stay here even after chat history expires.</p>
         <div className="mt-5 space-y-3">
-          {savedMessages.length === 0 && <p className="rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-slate-400">No saved messages yet. Use Save beside a message in a private or group chat.</p>}
+          {savedMessages.length === 0 && <p className="rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-slate-400">No saved messages yet. Select a message in a private or group chat to save it.</p>}
           {savedMessages.map((message) => (
             <article key={message._id} className="rounded-2xl border border-white/10 bg-black/45 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -611,6 +652,9 @@ export function OwnerPortal() {
   const [section, navigate] = useSectionNavigation<OwnerSection>("inbox", ownerSectionIds);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [feed, setFeed] = useState<FeedMessage[]>([]);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [messageEditDraft, setMessageEditDraft] = useState("");
+  const [messageEditBusy, setMessageEditBusy] = useState(false);
   const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [groups, setGroups] = useState<OwnerGroup[]>([]);
   const [reply, setReply] = useState<Record<string, string>>({});
@@ -711,6 +755,26 @@ export function OwnerPortal() {
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Reply could not be sent.");
+    }
+  }
+
+  async function saveSentMessage(messageId: string) {
+    const text = messageEditDraft.trim();
+    if (!text) {
+      setError("Message cannot be empty.");
+      return;
+    }
+    setMessageEditBusy(true);
+    try {
+      await act(`/api/owner/messages/${messageId}`, "PATCH", { text });
+      setEditingMessageId(null);
+      setMessageEditDraft("");
+      setNotice("Sent reply updated.");
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Message could not be updated.");
+    } finally {
+      setMessageEditBusy(false);
     }
   }
 
@@ -1004,7 +1068,25 @@ export function OwnerPortal() {
             {feed.length === 0 && <p className="text-sm text-slate-400">Messages from verified contacts will appear here.</p>}
             {feed.map((message) => <article key={message._id} className="rounded-xl border border-white/10 bg-slate-950/35 p-3">
               <div className="flex justify-between gap-2"><p className="text-sm font-medium">{message.contactName} <span className="font-normal text-slate-500">· {message.role}</span></p><time className="text-xs text-slate-500">{new Date(message.createdAt).toLocaleTimeString()}</time></div>
-              <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-300">{message.text}</p>
+              {editingMessageId === message._id ? (
+                <div className="mt-3 space-y-2">
+                  <label htmlFor={`edit-message-${message._id}`} className="sr-only">Edit the reply sent to {message.contactName}</label>
+                  <textarea id={`edit-message-${message._id}`} value={messageEditDraft} onChange={(event) => setMessageEditDraft(event.target.value)} maxLength={4000} rows={4} className={`${field} resize-y`} />
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void saveSentMessage(message._id)} disabled={messageEditBusy || !messageEditDraft.trim()} className={`${button} py-2`}>{messageEditBusy ? "Saving…" : "Save edit"}</button>
+                    <button type="button" onClick={() => { setEditingMessageId(null); setMessageEditDraft(""); }} disabled={messageEditBusy} className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-300">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-300">{message.text}</p>
+                  {message.role === "owner" && (
+                    <button type="button" onClick={() => { setEditingMessageId(message._id); setMessageEditDraft(message.text); setError(""); }} className="mt-2 rounded-lg border border-red-300/20 px-3 py-1.5 text-xs text-red-200 transition hover:border-red-300/40 hover:text-white">
+                      Edit sent reply
+                    </button>
+                  )}
+                </>
+              )}
             </article>)}
           </div>
         </section>}
